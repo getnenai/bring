@@ -44,6 +44,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("returns empty connection ID before handshake completes", func() {
+			s.st = SessionHandshake
 			Expect(c.ConnectionID()).To(Equal(""))
 		})
 
