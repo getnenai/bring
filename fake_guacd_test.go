@@ -2,6 +2,7 @@ package bring
 
 import (
 	"net"
+	"sync"
 
 	"github.com/deluan/bring/protocol"
 )
@@ -9,6 +10,7 @@ import (
 const disconnectOpcode = "disconnect"
 
 type fakeServer struct {
+	mu               sync.Mutex
 	replies          map[string]string
 	messagesReceived []string
 	opcodesReceived  []string
@@ -48,8 +50,10 @@ func (s *fakeServer) handleRequest(conn net.Conn) {
 		if opcode == disconnectOpcode {
 			break
 		}
+		s.mu.Lock()
 		s.messagesReceived = append(s.messagesReceived, recv.String())
 		s.opcodesReceived = append(s.opcodesReceived, opcode)
+		s.mu.Unlock()
 	}
 	_, err := io.Write(protocol.NewInstruction(disconnectOpcode))
 	if err != nil {

@@ -21,7 +21,7 @@ var _ = Describe("Client", func() {
 		l := &DefaultLogger{Quiet: true}
 		s = &session{
 			In:       make(chan *protocol.Instruction, 100),
-			State:    SessionActive,
+			st:       SessionActive,
 			done:     make(chan bool),
 			logger:   l,
 			tunnel:   t,
@@ -37,9 +37,9 @@ var _ = Describe("Client", func() {
 
 	Context("Active session", func() {
 		It("exposes the session state", func() {
-			s.State = SessionHandshake
+			s.st = SessionHandshake
 			Expect(c.State()).To(Equal(SessionHandshake))
-			s.State = SessionClosed
+			s.st = SessionClosed
 			Expect(c.State()).To(Equal(SessionClosed))
 		})
 
@@ -48,7 +48,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("returns the connection ID assigned during handshake", func() {
-			s.Id = "$unique-connection-id"
+			s.connID = "$unique-connection-id"
 			Expect(c.ConnectionID()).To(Equal("$unique-connection-id"))
 		})
 
@@ -110,7 +110,7 @@ var _ = Describe("Client", func() {
 
 	Context("Session is disconnected", func() {
 		BeforeEach(func() {
-			s.State = SessionClosed
+			s.st = SessionClosed
 		})
 
 		It("does not send anything", func() {

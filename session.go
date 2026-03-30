@@ -6,6 +6,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/deluan/bring/protocol"
@@ -32,14 +33,15 @@ const pingFrequency = 5 * time.Second
 // and it is responsible for the initial handshake and to send and receive instructions.
 // Instructions received are put in the In channel. Instructions are sent using the Send() function
 type session struct {
-	In    chan *protocol.Instruction
-	State SessionState
-	Id    string
+	In chan *protocol.Instruction
 
-	tunnel   protocol.Tunnel
-	logger   Logger
-	done     chan bool
-	config   map[string]string
+	mu      sync.RWMutex
+	st      SessionState
+	connID  string
+	tunnel  protocol.Tunnel
+	logger  Logger
+	done    chan bool
+	config  map[string]string
 	protocol string
 }
 
@@ -58,7 +60,7 @@ func newSession(addr string, remoteProtocol string, config map[string]string, lo
 
 	s := &session{
 		In:       make(chan *protocol.Instruction, 100),
-		State:    SessionClosed,
+		st:       SessionClosed,
 		done:     make(chan bool),
 		logger:   logger,
 		tunnel:   t,
@@ -73,7 +75,7 @@ func newSession(addr string, remoteProtocol string, config map[string]string, lo
 		return nil, err
 	}
 
-	s.State = SessionHandshake
+	s.st = SessionHandshake
 	s.startReader()
 
 	return s, nil
@@ -81,16 +83,30 @@ func newSession(addr string, remoteProtocol string, config map[string]string, lo
 
 // Terminate the current session, disconnecting from the server
 func (s *session) Terminate() {
-	if s.State == SessionClosed {
+	s.mu.Lock()
+	if s.st == SessionClosed {
+		s.mu.Unlock()
 		return
 	}
+	s.st = SessionClosed
+	s.mu.Unlock()
 	close(s.done)
-	s.State = SessionClosed
 	_ = s.tunnel.SendInstruction(protocol.NewInstruction("disconnect"))
 	s.tunnel.Disconnect()
 }
 
-// Send instructions to the server. Multiple instructions are sent in one single transaction
+// state returns the current session state, safe for concurrent use.
+func (s *session) state() SessionState {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.st
+}
+
+func (s *session) connectionID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.connID
+}
 func (s *session) Send(ins ...*protocol.Instruction) error {
 	for _, i := range ins {
 		s.logger.Debugf("C> %s", i)
@@ -134,18 +150,20 @@ func (s *session) startReader() {
 				continue
 			}
 			if ins.Opcode == "ready" {
-				s.State = SessionActive
-				s.Id = ins.Args[0]
-				s.logger.Infof("Handshake successful. Got connection ID %s", s.Id)
+				s.mu.Lock()
+				s.st = SessionActive
+				s.connID = ins.Args[0]
+				s.mu.Unlock()
+				s.logger.Infof("Handshake successful. Got connection ID %s", ins.Args[0])
 				s.startKeepAlive()
 				continue
 			}
-			if s.State == SessionHandshake {
+			if s.state() == SessionHandshake {
 				s.logger.Infof("Handshake started at %s", time.Now().Format(time.RFC3339))
 				s.handShake(ins)
 				continue
 			}
-			if s.State == SessionActive {
+			if s.state() == SessionActive {
 				s.In <- ins
 				continue
 			}
