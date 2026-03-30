@@ -64,8 +64,15 @@ func (c *Client) Start() {
 			if err != nil {
 				c.session.Terminate()
 			}
+		case <-c.session.done:
+			return
 		}
 	}
+}
+
+// Stop terminates the session and unblocks any goroutine running Start().
+func (c *Client) Stop() {
+	c.session.Terminate()
 }
 
 // OnSync sets a function that will be called on every sync instruction received. This event
