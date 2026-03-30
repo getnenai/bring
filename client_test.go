@@ -4,6 +4,7 @@ import (
 	"image"
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/deluan/bring/protocol"
 	. "github.com/onsi/ginkgo"
@@ -40,6 +41,15 @@ var _ = Describe("Client", func() {
 			Expect(c.State()).To(Equal(SessionHandshake))
 			s.State = SessionClosed
 			Expect(c.State()).To(Equal(SessionClosed))
+		})
+
+		It("returns empty connection ID before handshake completes", func() {
+			Expect(c.ConnectionID()).To(Equal(""))
+		})
+
+		It("returns the connection ID assigned during handshake", func() {
+			s.Id = "$unique-connection-id"
+			Expect(c.ConnectionID()).To(Equal("$unique-connection-id"))
 		})
 
 		It("sends the mouse position to the remote server", func() {
@@ -113,6 +123,47 @@ var _ = Describe("Client", func() {
 			err = c.SendMouse(image.Pt(0, 0), MouseRight)
 			Expect(err).To(Equal(ErrNotConnected))
 		})
+	})
+})
+
+// Integration tests using fakeServer to exercise the full NewClient → Start flow.
+var _ = Describe("Client (integration)", func() {
+	var (
+		server *fakeServer
+		c      *Client
+	)
+
+	BeforeEach(func() {
+		server = &fakeServer{
+			replies: map[string]string{
+				"select":  "4.args,8.hostname,4.port,8.password;",
+				"connect": "5.ready,21.$unique-connection-id;",
+			},
+		}
+		addr := server.start()
+		var err error
+		c, err = NewClient(addr, "rdp", map[string]string{
+			"hostname": "host1",
+			"port":     "port1",
+			"password": "password123",
+		}, &DefaultLogger{Quiet: true})
+		Expect(err).To(BeNil())
+		go c.Start()
+
+		Eventually(func() SessionState {
+			return c.State()
+		}, 3*time.Second, 100*time.Millisecond).Should(Equal(SessionActive))
+	})
+
+	It("returns the connection ID after a real handshake", func() {
+		Expect(c.ConnectionID()).To(Equal("$unique-connection-id"))
+	})
+
+	It("has a non-empty connection ID as soon as State becomes SessionActive", func() {
+		// rdp.go reads ConnectionID immediately after observing SessionActive;
+		// verify the ID is already populated at that point.
+		Expect(c.State()).To(Equal(SessionActive))
+		Expect(c.ConnectionID()).NotTo(BeEmpty())
 	})
 })
 
