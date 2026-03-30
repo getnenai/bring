@@ -2,6 +2,7 @@ package bring
 
 import (
 	"net"
+	"sync"
 
 	"github.com/deluan/bring/protocol"
 )
@@ -9,6 +10,8 @@ import (
 const disconnectOpcode = "disconnect"
 
 type fakeServer struct {
+	mu               sync.Mutex
+	ln               net.Listener
 	replies          map[string]string
 	messagesReceived []string
 	opcodesReceived  []string
@@ -19,16 +22,24 @@ func (s *fakeServer) start() string {
 	if err != nil {
 		panic(err)
 	}
+	s.ln = ln
 	go func() {
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
-				panic(err)
+				return // listener closed by stop()
 			}
 			s.handleRequest(conn)
 		}
 	}()
 	return ln.Addr().String()
+}
+
+// stop closes the listener, causing the accept loop to exit.
+func (s *fakeServer) stop() {
+	if s.ln != nil {
+		s.ln.Close()
+	}
 }
 
 func (s *fakeServer) handleRequest(conn net.Conn) {
@@ -48,8 +59,10 @@ func (s *fakeServer) handleRequest(conn net.Conn) {
 		if opcode == disconnectOpcode {
 			break
 		}
+		s.mu.Lock()
 		s.messagesReceived = append(s.messagesReceived, recv.String())
 		s.opcodesReceived = append(s.opcodesReceived, opcode)
+		s.mu.Unlock()
 	}
 	_, err := io.Write(protocol.NewInstruction(disconnectOpcode))
 	if err != nil {

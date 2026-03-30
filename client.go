@@ -64,8 +64,15 @@ func (c *Client) Start() {
 			if err != nil {
 				c.session.Terminate()
 			}
+		case <-c.session.done:
+			return
 		}
 	}
+}
+
+// Stop terminates the session and unblocks any goroutine running Start().
+func (c *Client) Stop() {
+	c.session.Terminate()
 }
 
 // OnSync sets a function that will be called on every sync instruction received. This event
@@ -84,13 +91,19 @@ func (c *Client) Screen() (image image.Image, lastUpdate int64) {
 
 // State returns the current session state
 func (c *Client) State() SessionState {
-	return c.session.State
+	return c.session.state()
+}
+
+// ConnectionID returns the guacd connection ID assigned during handshake.
+// Empty until the session reaches SessionActive.
+func (c *Client) ConnectionID() string {
+	return c.session.connectionID()
 }
 
 // SendMouse sends mouse events to the server. An event is composed by position of the
 // cursor, and a list of any currently pressed MouseButtons
 func (c *Client) SendMouse(p image.Point, pressedButtons ...MouseButton) error {
-	if c.session.State != SessionActive {
+	if c.session.state() != SessionActive {
 		return ErrNotConnected
 	}
 
@@ -109,7 +122,7 @@ func (c *Client) SendMouse(p image.Point, pressedButtons ...MouseButton) error {
 // SendText sends the sequence of characters as they were typed. Only works with simple chars
 // (no combination with control keys)
 func (c *Client) SendText(sequence string) error {
-	if c.session.State != SessionActive {
+	if c.session.state() != SessionActive {
 		return ErrNotConnected
 	}
 
@@ -129,7 +142,7 @@ func (c *Client) SendText(sequence string) error {
 
 // SendKey sends key presses and releases.
 func (c *Client) SendKey(key KeyCode, pressed bool) error {
-	if c.session.State != SessionActive {
+	if c.session.state() != SessionActive {
 		return ErrNotConnected
 	}
 
