@@ -155,6 +155,15 @@ var _ = Describe("Client (integration)", func() {
 		}, 3*time.Second, 100*time.Millisecond).Should(Equal(SessionActive))
 	})
 
+	AfterEach(func() {
+		if c != nil {
+			c.Stop()
+		}
+		if server != nil {
+			server.stop()
+		}
+	})
+
 	It("returns the connection ID after a real handshake", func() {
 		Expect(c.ConnectionID()).To(Equal("$unique-connection-id"))
 	})
