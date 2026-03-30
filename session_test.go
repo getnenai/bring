@@ -45,16 +45,34 @@ var _ = Describe("Session", func() {
 		Expect(s.connectionID()).To(Equal("$unique-connection-id"))
 	})
 
-	It("allows concurrent reads of State and Id without data races", func() {
+	It("allows concurrent reads of state and connectionID during a state transition", func() {
+		// Launch 50 readers and one writer (Terminate) behind a common start gate
+		// so they all begin simultaneously. Without the mutex the race detector
+		// catches the write in Terminate() racing the reads in state() /
+		// connectionID().
 		var wg sync.WaitGroup
+		start := make(chan struct{})
+
 		for i := 0; i < 50; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				<-start
 				_ = s.state()
 				_ = s.connectionID()
 			}()
 		}
+
+		// Terminate changes st from SessionActive → SessionClosed while the
+		// readers are running.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			s.Terminate()
+		}()
+
+		close(start) // release all goroutines at once
 		wg.Wait()
 	})
 })
