@@ -87,6 +87,12 @@ func (c *Client) State() SessionState {
 	return c.session.State
 }
 
+// ConnectionID returns the guacd connection ID assigned during handshake.
+// Empty until the session reaches SessionActive.
+func (c *Client) ConnectionID() string {
+	return c.session.Id
+}
+
 // SendMouse sends mouse events to the server. An event is composed by position of the
 // cursor, and a list of any currently pressed MouseButtons
 func (c *Client) SendMouse(p image.Point, pressedButtons ...MouseButton) error {
