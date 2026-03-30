@@ -180,3 +180,41 @@ func (mt *mockTunnel) SendInstruction(ins ...*protocol.Instruction) error {
 	mt.sent = append(mt.sent, ins...)
 	return nil
 }
+
+var _ = Describe("Client.Stop()", func() {
+	It("unblocks a goroutine running Start()", func() {
+		server := &fakeServer{
+			replies: map[string]string{
+				"select":  "4.args,8.hostname,4.port,8.password;",
+				"connect": "5.ready,21.$unique-connection-id;",
+			},
+		}
+		addr := server.start()
+		c, err := NewClient(addr, "rdp", map[string]string{
+			"hostname": "host1",
+			"port":     "port1",
+			"password": "password123",
+		}, &DefaultLogger{Quiet: true})
+		Expect(err).To(BeNil())
+
+		startDone := make(chan struct{})
+		go func() {
+			defer close(startDone)
+			c.Start()
+		}()
+
+		Eventually(func() SessionState {
+			return c.State()
+		}, 3*time.Second, 100*time.Millisecond).Should(Equal(SessionActive))
+
+		// Without Stop() / a done-aware Start(), this goroutine blocks forever.
+		c.Stop()
+
+		select {
+		case <-startDone:
+			// pass — goroutine exited
+		case <-time.After(2 * time.Second):
+			Fail("Start() goroutine did not exit after Stop() was called")
+		}
+	})
+})
