@@ -148,7 +148,6 @@ var _ = Describe("Client (integration)", func() {
 			"password": "password123",
 		}, &DefaultLogger{Quiet: true})
 		Expect(err).To(BeNil())
-		go c.Start()
 
 		Eventually(func() SessionState {
 			return c.State()

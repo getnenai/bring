@@ -44,6 +44,8 @@ func (t *noDisconnectTunnel) ReceiveInstruction() (*protocol.Instruction, error)
 var _ = Describe("Session Terminate guard", func() {
 	It("does not transition to SessionActive if Terminate is called before ready", func() {
 		ch := make(chan *protocol.Instruction, 4)
+		defer close(ch) // unblocks startReader so its goroutine exits when the test ends
+
 		// Queue "args" to trigger the handshake in startReader.
 		ch <- protocol.NewInstruction("args", "hostname", "port", "password")
 
