@@ -151,6 +151,10 @@ func (s *session) startReader() {
 			}
 			if ins.Opcode == "ready" {
 				s.mu.Lock()
+				if s.st == SessionClosed {
+					s.mu.Unlock()
+					continue
+				}
 				s.st = SessionActive
 				s.connID = ins.Args[0]
 				s.mu.Unlock()
