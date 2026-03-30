@@ -199,6 +199,7 @@ func (s *session) handShake(argsIns *protocol.Instruction) {
 	if err != nil {
 		s.logger.Errorf("Failed handshake: %s", err)
 		s.Terminate()
+		return
 	}
 
 	connectValues := make([]string, len(argsIns.Args))
