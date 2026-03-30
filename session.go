@@ -177,6 +177,9 @@ func (s *session) startReader() {
 }
 
 func (s *session) handShake(argsIns *protocol.Instruction) {
+	if s.state() == SessionClosed {
+		return
+	}
 	width := s.config["width"]
 	if width == "" {
 		width = defaultWidth
