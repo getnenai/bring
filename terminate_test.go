@@ -92,3 +92,34 @@ var _ = Describe("Session Terminate guard", func() {
 		}, "200ms", "10ms").Should(Equal(SessionClosed))
 	})
 })
+
+var _ = Describe("Session handShake guard", func() {
+	It("does not send connect when the session has been terminated", func() {
+		// startReader checks s.state()==SessionHandshake then calls handShake,
+		// but Terminate() can run between those two steps and set st=SessionClosed.
+		// Without a guard, handShake proceeds and sends "connect" to a closed session.
+		mt := &noDisconnectTunnel{ch: make(chan *protocol.Instruction, 4)}
+		s := &session{
+			In:       make(chan *protocol.Instruction, 100),
+			st:       SessionClosed, // already terminated before handShake runs
+			done:     make(chan bool),
+			logger:   &DefaultLogger{Quiet: true},
+			tunnel:   mt,
+			protocol: "rdp",
+			config: map[string]string{
+				"hostname": "host1",
+				"port":     "port1",
+				"password": "password123",
+			},
+		}
+
+		s.handShake(protocol.NewInstruction("args", "hostname", "port", "password"))
+
+		mt.mu.Lock()
+		defer mt.mu.Unlock()
+		for _, ins := range mt.sent {
+			Expect(ins.Opcode).NotTo(Equal("connect"),
+				"connect must not be sent to a terminated session")
+		}
+	})
+})
