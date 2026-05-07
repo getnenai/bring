@@ -4,6 +4,7 @@ import (
 	"image"
 	"math"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/deluan/bring/protocol"
@@ -189,6 +190,63 @@ func (mt *mockTunnel) SendInstruction(ins ...*protocol.Instruction) error {
 	mt.sent = append(mt.sent, ins...)
 	return nil
 }
+
+var _ = Describe("OnInputDrain", func() {
+	var (
+		s *session
+		c *Client
+	)
+
+	BeforeEach(func() {
+		l := &DefaultLogger{Quiet: true}
+		s = &session{
+			In:       make(chan *protocol.Instruction, 16),
+			st:       SessionActive,
+			done:     make(chan bool),
+			logger:   l,
+			tunnel:   &mockTunnel{},
+			protocol: "rdp",
+		}
+		c = &Client{
+			session: s,
+			display: newDisplay(l),
+			streams: newStreams(),
+			logger:  l,
+		}
+	})
+
+	It("fires the callback once per inbound nop", func() {
+		var calls int32
+		c.OnInputDrain(func() { atomic.AddInt32(&calls, 1) })
+
+		go c.Start()
+
+		s.In <- protocol.NewInstruction("nop")
+		s.In <- protocol.NewInstruction("nop")
+		s.In <- protocol.NewInstruction("nop")
+
+		Eventually(func() int32 { return atomic.LoadInt32(&calls) },
+			2*time.Second, 10*time.Millisecond).Should(Equal(int32(3)))
+
+		close(s.done)
+	})
+
+	It("is a no-op when no callback is registered", func() {
+		// No OnInputDrain registered; an inbound nop must not panic or block.
+		go c.Start()
+
+		s.In <- protocol.NewInstruction("nop")
+		s.In <- protocol.NewInstruction("nop")
+
+		// Give the dispatch loop a moment to process; if the handler
+		// panicked, the goroutine would have died and the next push would
+		// hang indefinitely. We rely on Eventually's timeout-on-failure.
+		Eventually(func() int { return len(s.In) },
+			2*time.Second, 10*time.Millisecond).Should(Equal(0))
+
+		close(s.done)
+	})
+})
 
 var _ = Describe("Client.Stop()", func() {
 	It("unblocks a goroutine running Start()", func() {

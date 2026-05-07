@@ -19,11 +19,12 @@ type OnSyncFunc = func(image image.Image, lastUpdate int64)
 // Automatically handles incoming and outgoing Guacamole instructions, updating its display
 // using one or more graphic primitives.
 type Client struct {
-	session *session
-	display *display
-	streams streams
-	logger  Logger
-	onSync  OnSyncFunc
+	session      *session
+	display      *display
+	streams      streams
+	logger       Logger
+	onSync       OnSyncFunc
+	onInputDrain func()
 }
 
 // NewClient creates a Client and connects it to the guacd server with the provided configuration. Logger is optional
@@ -82,6 +83,19 @@ func (c *Client) Stop() {
 // If your handler is slow, consider using a concurrent pattern (using goroutines)
 func (c *Client) OnSync(f OnSyncFunc) {
 	c.onSync = f
+}
+
+// OnInputDrain sets a function that will be called on every nop instruction received.
+// nop is bidirectional in the Guacamole protocol and is silently dropped by upstream
+// guacd, so under upstream this callback never fires. When paired with a guacd build
+// that emits nop after each input-drain iteration (see the emit-input-drain RDP arg
+// in the getnenai/guacamole-server fork), this callback acts as a precise per-iteration
+// barrier signal — useful for clients that need to know guacd has dispatched their
+// queued input to the underlying remote-desktop session.
+//
+// Must be set before Start(); the field is read without synchronization.
+func (c *Client) OnInputDrain(f func()) {
+	c.onInputDrain = f
 }
 
 // Screen returns a snapshot of the current screen, together with the last updated timestamp
