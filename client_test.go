@@ -238,6 +238,14 @@ var _ = Describe("OnInputDrain", func() {
 		}).To(PanicWith(ContainSubstring("OnInputDrain already registered")))
 	})
 
+	It("panics on a nil callback to prevent silent no-op registration", func() {
+		// A nil first call must not stealth-bypass the write-once guard and let
+		// a second call install a real handler.
+		Expect(func() {
+			c.OnInputDrain(nil)
+		}).To(PanicWith(ContainSubstring("must not be nil")))
+	})
+
 	It("is a no-op when no callback is registered", func() {
 		// No OnInputDrain registered; an inbound nop must not panic or block.
 		go c.Start()
