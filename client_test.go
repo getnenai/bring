@@ -231,6 +231,13 @@ var _ = Describe("OnInputDrain", func() {
 		close(s.done)
 	})
 
+	It("panics on a second registration to surface wiring bugs", func() {
+		c.OnInputDrain(func() {})
+		Expect(func() {
+			c.OnInputDrain(func() {})
+		}).To(PanicWith(ContainSubstring("OnInputDrain already registered")))
+	})
+
 	It("is a no-op when no callback is registered", func() {
 		// No OnInputDrain registered; an inbound nop must not panic or block.
 		go c.Start()

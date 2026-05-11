@@ -93,8 +93,15 @@ func (c *Client) OnSync(f OnSyncFunc) {
 // barrier signal — useful for clients that need to know guacd has dispatched their
 // queued input to the underlying remote-desktop session.
 //
-// Must be set before Start(); the field is read without synchronization.
+// Write-once: must be set before Start(), and only once. The field is read from the
+// Start() dispatch loop without synchronization, so re-registering after Start() would
+// race the reader. A second call panics rather than silently replacing the previous
+// callback — silent replacement would mask wiring bugs (e.g. two subsystems each
+// installing their own barrier and only one of them firing).
 func (c *Client) OnInputDrain(f func()) {
+	if c.onInputDrain != nil {
+		panic("bring: OnInputDrain already registered; must be called at most once before Start()")
+	}
 	c.onInputDrain = f
 }
 
