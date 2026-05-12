@@ -96,6 +96,13 @@ var handlers = map[string]handlerFunc{
 		return nil
 	},
 
+	"nop": func(c *Client, args []string) error {
+		if c.onInputDrain != nil {
+			c.onInputDrain()
+		}
+		return nil
+	},
+
 	"rect": func(c *Client, args []string) error {
 		layerIdx := parseInt(args[0])
 		x := parseInt(args[1])

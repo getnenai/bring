@@ -146,9 +146,6 @@ func (s *session) startReader() {
 			} else {
 				s.logger.Debugf("S> %s", ins)
 			}
-			if ins.Opcode == "nop" {
-				continue
-			}
 			if ins.Opcode == "ready" {
 				s.mu.Lock()
 				if s.st == SessionClosed {
