@@ -103,6 +103,18 @@ var handlers = map[string]handlerFunc{
 		return nil
 	},
 
+	// Nen fork: distinct keepalive instruction emitted by the
+	// getnenai/guacamole-server fork's keepalive-interval arg. It is
+	// deliberately NOT a nop so it cannot satisfy the input-drain
+	// barrier above (onInputDrain) — keepalive and input-drain stay
+	// decoupled by construction. Explicit no-op handler (rather than an
+	// unhandled opcode) so the dispatch loop does not log "Instruction
+	// not implemented" every keepalive interval. See
+	// getnenai/guacamole-server FORK.md / Linear NEN-1488.
+	"nen-keepalive": func(c *Client, args []string) error {
+		return nil
+	},
+
 	"rect": func(c *Client, args []string) error {
 		layerIdx := parseInt(args[0])
 		x := parseInt(args[1])

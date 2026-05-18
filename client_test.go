@@ -231,6 +231,37 @@ var _ = Describe("OnInputDrain", func() {
 		close(s.done)
 	})
 
+	It("does NOT fire the callback for nen-keepalive (decoupled from input-drain)", func() {
+		// Authoritative proof for NEN-1488: the getnenai/guacamole-server
+		// keepalive emits a distinct "nen-keepalive" instruction, never a
+		// nop, so it must not advance the input-drain barrier even when
+		// interleaved with real input-drain nops. A keepalive that fired
+		// onInputDrain would re-introduce the typeText keystroke race.
+		var calls int32
+		c.OnInputDrain(func() { atomic.AddInt32(&calls, 1) })
+
+		go c.Start()
+
+		s.In <- protocol.NewInstruction("nop")
+		s.In <- protocol.NewInstruction("nen-keepalive")
+		s.In <- protocol.NewInstruction("nop")
+		s.In <- protocol.NewInstruction("nen-keepalive")
+		s.In <- protocol.NewInstruction("nop")
+
+		// Exactly the 3 nops fire onInputDrain; the 2 keepalives do not.
+		Eventually(func() int32 { return atomic.LoadInt32(&calls) },
+			2*time.Second, 10*time.Millisecond).Should(Equal(int32(3)))
+		// And the keepalives did not error/terminate the dispatch loop:
+		// all instructions drained and a further nop still processes.
+		Eventually(func() int { return len(s.In) },
+			2*time.Second, 10*time.Millisecond).Should(Equal(0))
+		s.In <- protocol.NewInstruction("nop")
+		Eventually(func() int32 { return atomic.LoadInt32(&calls) },
+			2*time.Second, 10*time.Millisecond).Should(Equal(int32(4)))
+
+		close(s.done)
+	})
+
 	It("panics on a second registration to surface wiring bugs", func() {
 		c.OnInputDrain(func() {})
 		Expect(func() {
